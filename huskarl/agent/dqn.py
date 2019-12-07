@@ -1,8 +1,9 @@
 from tensorflow.keras.layers import Dense, Lambda
-from tensorflow.keras.models import Model
+from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.optimizers import Adam
 import tensorflow as tf
 import numpy as np
+import pickle
 
 from huskarl.policy import EpsGreedy, Greedy
 from huskarl.core import Agent, HkException
@@ -27,13 +28,13 @@ class DQN(Agent):
 		TODO: Describe parameters
 		"""
 		self.actions = actions
-		self.optimizer = Adam(lr=3e-3) if optimizer is None else optimizer
+		self.optimizer = Adam(lr=8e-5) if optimizer is None else optimizer
 
-		self.policy = EpsGreedy(0.1) if policy is None else policy
+		self.policy = EpsGreedy(0.05) if policy is None else policy
 		self.test_policy = Greedy() if test_policy is None else test_policy
 
 		self.memsize = memsize
-		self.memory = memory.PrioritizedExperienceReplay(memsize, nsteps)
+		self.memory = memory.ExperienceReplay(memsize, nsteps)
 
 		self.target_update = target_update
 		self.gamma = gamma
@@ -82,15 +83,24 @@ class DQN(Agent):
 				qvals = tf.py_function(func=update_priorities, inp=[qvals, target_qvals, data[:,2]], Tout=tf.float32)
 			return tf.keras.losses.mse(qvals, target_qvals)
 
+		self.masked_q_loss = masked_q_loss
+
 		self.model.compile(optimizer=self.optimizer, loss=masked_q_loss)
 
 		# Clone model to use for delayed Q targets
 		self.target_model = tf.keras.models.clone_model(self.model)
 		self.target_model.set_weights(self.model.get_weights())
 
-	def save(self, filename, overwrite=False):
+	def load(self, filename):
+		self.model = load_model(filename + "_model.h5", custom_objects={'masked_q_loss': self.masked_q_loss})
+		with open(filename + "_mem.pkl", 'rb') as file:
+			self.memory = pickle.load(file)
+
+	def save(self, filename):
 		"""Saves the model parameters to the specified file."""
-		self.model.save_weights(filename, overwrite=overwrite)
+		self.model.save(filename + "_model.h5")
+		with open(filename + "_mem.pkl", 'wb') as file:
+			pickle.dump(self.memory, file)
 
 	def act(self, state, instance=0):
 		"""Returns the action to be taken given a state."""

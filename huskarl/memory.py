@@ -100,7 +100,6 @@ class ExperienceReplay:
 		"""Returns the number of traces stored."""
 		return len(self.traces)
 
-
 EPS = 1e-3 # Constant added to all priorities to prevent them from being zero
 
 
